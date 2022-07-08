@@ -2,6 +2,7 @@ from logging import root
 from math import ceil
 import os
 from os.path import exists
+from datetime import datetime, time
 
 FF8BYTES = 18446744073709551615      #VALOR INTEIRO DE FF PRA 8 BYTES
 
@@ -59,7 +60,7 @@ def Read_Folder(image, boot_info, isRoot):
     return folder_content
 
 def ShowFolder(folder_content, image, boot_info):
-    #clear()
+    clear()
 
     max_name = 0
     for content in folder_content:
@@ -79,18 +80,22 @@ def ShowFolder(folder_content, image, boot_info):
     pass
 
 def Startup():
-    cmd = input('BEM-VINDO AO SUPERMINI!\nSelecione a ação desejada:\nA - Abrir uma imagem\nC - Criar uma imagem\n')
-    while cmd!='A' and cmd!='C':
+    print('-'*27)
+    print('| BEM-VINDO AO SUPERMINI! |')
+    print('-'*27)
+    cmd = input('Insira a ação desejada:\nA - Abrir uma imagem\nC - Criar uma imagem\n')
+    while cmd.upper()!='A' and cmd.upper()!='C':
         cmd = input('Comando inválido. Digite novamente.\n')
 
-    if cmd == 'A':
-        while not exists(input('Digite o nome da imagem SuperMini que deseja acessar\n')):
-            print('Arquivo não encontrado!')
+    if cmd.upper() == 'A':
+        filename = input('Digite o nome da imagem SuperMini que deseja acessar\n')
+        while not exists(filename):
+            filename = print('Arquivo não encontrado!')
         
-        image = open('superMINI.img', 'rb')
+        image = open(filename, 'rb')
         boot_info = read_boot(image)
         root_content = Read_Folder(image, boot_info, True)
-    elif cmd == 'C':
+    elif cmd.upper() == 'C':
         CriarImagem()
 
     return image, boot_info, root_content
@@ -105,49 +110,84 @@ def OpenThing(folder_content, cmd, image, boot_info):
     else:
         ShowFile(image, boot_info, folder_content, thing_index)
 
-def CreateDirectory(cmd):   #Lucas
+def CreateDirectory(folder_content, cmd, image, boot_info):   #Lucas
     pass
 
-def TransferToDisc(cmd):    #Lucas
+def TransferToDisc(folder_content, cmd, image, boot_info):    #Lucas
     pass
 
-def WriteToSuperMini(cmd):  #Igor
+def WriteToSuperMini(folder_content, cmd, image, boot_info):  #Igor
     pass
 
-def FormatImg(cmd):         #Mahat
+def FormatImg(folder_content, cmd, image, boot_info):         #Mahat
     pass
 
 def CriarImagem():          #Mahato
     pass
 
-def ShowHelp():             #Mahat
+def ShowHelp(folder_content, cmd, image, boot_info):     
+    clear() 
+    print('Todos os comandos seguem a seguinte sintaxe: \'X args\'')
+    print('Substitua X pela letra correspondente ao comando desejada e args pelos parâmetros necessários ao comando.')
+    print('Não esqueça de colocar um espaço entre o comando e seus parâmetros!')
+    print()
+    print('Os seguintes comandos podem ser utilizados:')
+    print('A - Abrir arquivo/diretório. O parâmetro passado deve ser o índice exibido no diretório atual')
+    print('    Ex: A 12')
+    print('C - Criar diretório. O parâmetro passado deve ser o nome do diretório.')
+    print('    Ex: C nova_pasta')
+    print('E - Escrever um arquivo no SuperMini. O parâmetro deve ser o nome do arquivo a ser lido do disco para o SuperMini.')
+    print('    Ex: E teste.txt. ATENÇÃO: O arquivo a ser escrito no SuperMini deve se encontrar na mesma pasta que a aplicação')
+    print('F - Formatar. Nenhum parâmetro é passado.')
+    print('    Ex: F')
+    print('S - Sair. Encerra a aplicação. Nenhum parâmetro é passado.')
+    print('    Ex: S')
+    print('T - Transferir do SuperMini para o disco. O parâmetro deve ser o índice do arquivo a ser transferido.')
+    print('    Ex: T 12')
+    print()
+    
+    back_input = input('Insira X para voltar ao diretório anterior.\n')
+    while back_input.upper() != 'X':
+        back_input = input('Insira X para voltar ao diretório anterior.\n')
+    
+    ShowFolder(folder_content, image, boot_info)
     pass
 
-
-
+def Fechar(folder_content, cmd, image, boot_info):
+    clear()
+    print('Obrigado por utilizar o SuperMini!')
+    now = datetime.now().time()
+    if now >= time(5,00) and now <= time(12,00): 
+        print('++++++Tenha um ótimo dia!++++++')
+    elif now > time(12,00) and now <= time(18,00): 
+        print('******Tenha uma ótima tarde!******')
+    else:
+        print('------Tenha uma ótima noite!------')
+    
+    exit()
 
 def UserInterface(folder_content, image, boot_info):
     print('-------------------------------------------')
     print('Insira um comando. Insira H para ver ajuda.')
     
-    commands = ['A', 'C', 'E', 'F', 'H', 'T']
+    commands = ['A', 'C', 'E', 'F', 'H', 'S', 'T']
     #Abrir, Criar Diretorio, Escrever no SuperMini, Formatar, Transferir para disco
     cmd = input()
 
-    print(f"folder_content_length: {len(folder_content)}")
-    while cmd[0] not in commands or (cmd[0]=='A' and int(cmd[2:])>=len(folder_content)):
+    while cmd[0].upper() not in commands or (cmd[0].upper()=='A' and int(cmd[2:])>=len(folder_content)):
         cmd = input('Comando inválido. Digite novamente.\n')
     
     command_dict = {
-        'A': OpenThing(folder_content, cmd, image, boot_info),
-        'C': CreateDirectory(cmd[2:]),
-        'E': WriteToSuperMini(cmd[2:]),
-        'F': FormatImg(cmd[2:]),
-        'H': ShowHelp(),
-        'T': TransferToDisc(cmd[2:])
+        'A': OpenThing,
+        'C': CreateDirectory,
+        'E': WriteToSuperMini,
+        'F': FormatImg,
+        'H': ShowHelp,
+        'S': Fechar,
+        'T': TransferToDisc
     }
 
-    command_dict[cmd[0]]
+    command_dict[cmd[0].upper()](folder_content, cmd, image, boot_info)
         
     pass
 
