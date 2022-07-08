@@ -117,7 +117,7 @@ def WriteToSuperMini(cmd):  #Igor
 def FormatImg(cmd):         #Mahat
     pass
 
-def CriarImagem():          #Mahat
+def CriarImagem():          #Mahato
     pass
 
 def ShowHelp():             #Mahat
