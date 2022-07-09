@@ -1,4 +1,3 @@
-from logging import root
 from math import ceil
 import os
 from os.path import exists
@@ -111,10 +110,31 @@ def OpenThing(folder_content, cmd, image, boot_info):
         ShowFile(image, boot_info, folder_content, thing_index)
 
 def CreateDirectory(folder_content, cmd, image, boot_info):   #Lucas
+
     pass
 
 def TransferToDisc(folder_content, cmd, image, boot_info):    #Lucas
-    pass
+    # start all the variables needed
+    file = b''
+    file_number = int(cmd[2:])
+    super_block_begin = folder_content[file_number][2]
+    size_left = folder_content[file_number][1]
+    image = WalkImage(image, boot_info, super_block_begin)
+
+    # read all the blocks of the file and get the data in raw format
+    next_block = 0
+    while next_block != FF8BYTES and size_left:
+        next_block = int.from_bytes(image.read(8), 'little')
+        block_size = int.from_bytes(image.read(8), 'little')
+        read_block = block_size * boot_info['block_size'] - 16
+        file += image.read(min(read_block, size_left))
+        size_left -= read_block
+
+    # Duvida: se importar com ser little endian ou big endian na hora de escrever?
+    # write file to disc as bytes
+    filename = input('Digite o nome do arquivo em que deseja salvar\n')
+    with open(filename, 'wb') as f:
+        f.write(file)
 
 def WriteToSuperMini(folder_content, cmd, image, boot_info):  #Igor
     pass
