@@ -25,6 +25,9 @@ def read_boot(image):
 def Read_Folder(image, boot_info, isRoot):
     next_block = 0
 
+    if isRoot:
+        image.seek(24)
+
     while next_block != FF8BYTES:
         next_block = int.from_bytes(image.read(8), 'little')
 
