@@ -61,7 +61,7 @@ def Read_Folder(image, boot_info, isRoot):
     return folder_content
 
 def ShowFolder(folder_content, image, boot_info):
-    clear()
+    #clear()
 
     max_name = 0
     for content in folder_content:
@@ -355,12 +355,21 @@ def Startup():
         cmd = input('Comando inválido. Digite novamente.\n')
 
     if cmd.upper() == 'A':
-        filename = input('Digite o nome da imagem SuperMini que deseja acessar\n')
-        while not exists(filename):
-            filename = print('Arquivo não encontrado!')
-        
-        image = open(filename, 'rb+')
-        boot_info = read_boot(image)
+        invalid_image = True
+        while invalid_image:
+            filename = input('Digite o nome da imagem SuperMini que deseja acessar\n')
+            while not exists(filename):
+                filename = print('Arquivo não encontrado!')
+            
+            image = open(filename, 'rb+')
+            boot_info = read_boot(image)
+            if boot_info['name'] != b'supmini':
+                print('-'*91)
+                print('ERRO: A imagem selecionada não está formatada no sistema SuperMini! Selecione outra imagem.')
+                print('-'*91)
+            else:
+                invalid_image = False
+
         root_content = Read_Folder(image, boot_info, True)
     elif cmd.upper() == 'C':
         CriarImagem()
