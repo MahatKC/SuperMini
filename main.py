@@ -81,27 +81,6 @@ def ShowFolder(folder_content, image, boot_info):
     UserInterface(folder_content, image, boot_info)
     pass
 
-def Startup():
-    print('-'*27)
-    print('| BEM-VINDO AO SUPERMINI! |')
-    print('-'*27)
-    cmd = input('Insira a ação desejada:\nA - Abrir uma imagem\nC - Criar uma imagem\n')
-    while cmd.upper()!='A' and cmd.upper()!='C':
-        cmd = input('Comando inválido. Digite novamente.\n')
-
-    if cmd.upper() == 'A':
-        filename = input('Digite o nome da imagem SuperMini que deseja acessar\n')
-        while not exists(filename):
-            filename = print('Arquivo não encontrado!')
-        
-        image = open(filename, 'rb+')
-        boot_info = read_boot(image)
-        root_content = Read_Folder(image, boot_info, True)
-    elif cmd.upper() == 'C':
-        CriarImagem()
-
-    return image, boot_info, root_content
-
 def OpenThing(folder_content, cmd, image, boot_info):
     thing_index = int(cmd[2:])
     image = WalkImage(image, boot_info, folder_content[thing_index][2])
@@ -224,6 +203,60 @@ def TransferToDisc(folder_content, cmd, image, boot_info):    #Lucas
 def WriteToSuperMini(folder_content, cmd, image, boot_info):  #Igor
     pass
 
+def MenuNewImg():
+    pass
+
+def FormatImg(folder_content, cmd, image, boot_info):         #Mahat
+    print('ATENÇÃO: A imagem atual será formatada e todos os dados serão perdidos.')
+    choice = input('Deseja continuar? (S/N)')
+    if choice != 'S':
+        ShowFolder(folder_content, image, boot_info)
+    else:
+        clear()
+        blocks_quantity, block_size = MenuFormat(boot_info)
+        print(blocks_quantity, block_size)
+
+    pass
+
+def ShowFile(image, boot_info, folder_content, thing_index):
+    next_block = 0
+    size_in_bytes = folder_content[thing_index][1]
+    content = ''
+
+    while next_block != FF8BYTES:
+        next_block = int.from_bytes(image.read(8), 'little')
+        super_block_size = int.from_bytes(image.read(8), 'little')
+        size_left_in_block = boot_info['block_size'] * super_block_size - 16
+
+        content += image.read(min(size_in_bytes, size_left_in_block)).decode('ASCII')
+
+        size_in_bytes -= size_left_in_block
+
+    print(content)
+
+    UserInterface(folder_content, image, boot_info)
+
+    pass
+
+def WalkImage(image, boot_info, block):
+    image.seek(block * boot_info['block_size'])
+    return image
+
+def CriarImagem():          #Mahato
+    image_name = input('Insira o nome da imagem que deseja criar com sufixo \'.img\'. Ex: \'teste.img\'\n')
+
+    print('Insira o número de blocos da imagem SuperMini.')
+    blocks_quantity = input('O número deve ser entre 4 e 2^64.\n')
+    while blocks_quantity<4 or blocks_quantity>2**64:
+        blocks_quantity = input('O número deve ser entre 4 e 2^64.\n')
+
+    print('\nInsira o expoente de 2 para o tamanho de bloco da imagem SuperMini.')
+    block_size = input('O número deve ser entre 9 (512 B/bloco) e 12 (4096 B/bloco).\n')
+    while block_size<9 or block_size>12:
+        block_size = input('O número deve ser entre 9 (512 B/bloco) e 12 (4096 B/bloco).\n')
+    
+    pass
+
 def MenuFormat(boot_info):
     size = boot_info['blocks_quantity']*boot_info['block_size']
     current_size = 0
@@ -249,35 +282,19 @@ def MenuFormat(boot_info):
     
     return blocks_quantity, block_size
 
-def MenuNewImg():
-    pass
-
-def FormatImg(folder_content, cmd, image, boot_info):         #Mahat
-    print('ATENÇÃO: A imagem atual será formatada e todos os dados serão perdidos.')
-    choice = input('Deseja continuar? (S/N)')
-    if choice != 'S':
-        ShowFolder(folder_content, image, boot_info)
+def Fechar(folder_content, cmd, image, boot_info):
+    clear()
+    print('Obrigado por utilizar o SuperMini!')
+    now = datetime.now().time()
+    if now >= time(5,00) and now <= time(12,00): 
+        print('++++++Tenha um ótimo dia!++++++')
+    elif now > time(12,00) and now <= time(18,00): 
+        print('******Tenha uma ótima tarde!******')
     else:
-        clear()
-        blocks_quantity, block_size = MenuFormat(boot_info)
-        print(blocks_quantity, block_size)
-
-    pass
-
-def CriarImagem():          #Mahato
-    image_name = input('Insira o nome da imagem que deseja criar com sufixo \'.img\'. Ex: \'teste.img\'\n')
-
-    print('Insira o número de blocos da imagem SuperMini.')
-    blocks_quantity = input('O número deve ser entre 4 e 2^64.\n')
-    while blocks_quantity<4 or blocks_quantity>2**64:
-        blocks_quantity = input('O número deve ser entre 4 e 2^64.\n')
-
-    print('\nInsira o expoente de 2 para o tamanho de bloco da imagem SuperMini.')
-    block_size = input('O número deve ser entre 9 (512 B/bloco) e 12 (4096 B/bloco).\n')
-    while block_size<9 or block_size>12:
-        block_size = input('O número deve ser entre 9 (512 B/bloco) e 12 (4096 B/bloco).\n')
+        print('------Tenha uma ótima noite!------')
     
-    pass
+    exit()
+
 
 def ShowHelp(folder_content, cmd, image, boot_info):     
     clear() 
@@ -307,19 +324,6 @@ def ShowHelp(folder_content, cmd, image, boot_info):
     ShowFolder(folder_content, image, boot_info)
     pass
 
-def Fechar(folder_content, cmd, image, boot_info):
-    clear()
-    print('Obrigado por utilizar o SuperMini!')
-    now = datetime.now().time()
-    if now >= time(5,00) and now <= time(12,00): 
-        print('++++++Tenha um ótimo dia!++++++')
-    elif now > time(12,00) and now <= time(18,00): 
-        print('******Tenha uma ótima tarde!******')
-    else:
-        print('------Tenha uma ótima noite!------')
-    
-    exit()
-
 def UserInterface(folder_content, image, boot_info):
     print('-------------------------------------------')
     print('Insira um comando. Insira H para ver ajuda.')
@@ -345,29 +349,26 @@ def UserInterface(folder_content, image, boot_info):
         
     pass
 
-def ShowFile(image, boot_info, folder_content, thing_index):
-    next_block = 0
-    size_in_bytes = folder_content[thing_index][1]
-    content = ''
+def Startup():
+    print('-'*27)
+    print('| BEM-VINDO AO SUPERMINI! |')
+    print('-'*27)
+    cmd = input('Insira a ação desejada:\nA - Abrir uma imagem\nC - Criar uma imagem\n')
+    while cmd.upper()!='A' and cmd.upper()!='C':
+        cmd = input('Comando inválido. Digite novamente.\n')
 
-    while next_block != FF8BYTES:
-        next_block = int.from_bytes(image.read(8), 'little')
-        super_block_size = int.from_bytes(image.read(8), 'little')
-        size_left_in_block = boot_info['block_size'] * super_block_size - 16
+    if cmd.upper() == 'A':
+        filename = input('Digite o nome da imagem SuperMini que deseja acessar\n')
+        while not exists(filename):
+            filename = print('Arquivo não encontrado!')
+        
+        image = open(filename, 'rb+')
+        boot_info = read_boot(image)
+        root_content = Read_Folder(image, boot_info, True)
+    elif cmd.upper() == 'C':
+        CriarImagem()
 
-        content += image.read(min(size_in_bytes, size_left_in_block)).decode('ASCII')
-
-        size_in_bytes -= size_left_in_block
-
-    print(content)
-
-    UserInterface(folder_content, image, boot_info)
-
-    pass
-
-def WalkImage(image, boot_info, block):
-    image.seek(block * boot_info['block_size'])
-    return image
+    return image, boot_info, root_content
 
 def main():
     image, boot_info, root_content = Startup()
