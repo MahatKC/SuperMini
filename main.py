@@ -40,7 +40,6 @@ def Read_Folder(image, boot_info, isRoot):
         isRoot = False
         size_left = boot_info['block_size'] * super_block_size - size_used
 
-        
         mini_block_attribute = image.read(1)
         folder_content = []
         while size_left:
@@ -152,7 +151,6 @@ def FindBlockSet(folder_content, cmd, image, boot_info, size):
     if sum < blocks_needed:
         print("Nao é possível armazenar todos os arquivos")
         return None
-
 
     #sort the list of lists of free blocks by the size of the list
     free_blocks.sort(key=len, reverse=True)
@@ -295,7 +293,6 @@ def Fechar(folder_content, cmd, image, boot_info):
     
     exit()
 
-
 def ShowHelp(folder_content, cmd, image, boot_info):     
     clear() 
     print('Todos os comandos seguem a seguinte sintaxe: \'X args\'')
@@ -373,7 +370,6 @@ def Startup():
 def main():
     image, boot_info, root_content = Startup()
     ShowFolder(root_content, image, boot_info)
-
 
 if '__main__' == __name__:
     main()
