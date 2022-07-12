@@ -1,4 +1,3 @@
-from logging import root
 from math import ceil
 import os
 from os.path import exists
@@ -25,6 +24,9 @@ def read_boot(image):
 
 def Read_Folder(image, boot_info, isRoot):
     next_block = 0
+
+    if isRoot:
+        image.seek(24)
 
     while next_block != FF8BYTES:
         next_block = int.from_bytes(image.read(8), 'little')
@@ -92,7 +94,7 @@ def Startup():
         while not exists(filename):
             filename = print('Arquivo não encontrado!')
         
-        image = open(filename, 'rb')
+        image = open(filename, 'rb+')
         boot_info = read_boot(image)
         root_content = Read_Folder(image, boot_info, True)
     elif cmd.upper() == 'C':
@@ -110,11 +112,114 @@ def OpenThing(folder_content, cmd, image, boot_info):
     else:
         ShowFile(image, boot_info, folder_content, thing_index)
 
+def UpdateBitmap(image, boot_info, blocks_used):
+    image = WalkImage(image, boot_info, 1)
+    print(blocks_used)
+    for blocks in blocks_used:
+        print((blocks)//8)
+        image.seek(boot_info['block_size'] + (blocks)//8)
+        # write 1 to bitmap at position of blocks used 
+        byte = image.read(1)
+        byte = byte[0] | (1 << 7 - (blocks)%8)
+        image.seek(boot_info['block_size'] + (blocks)//8)
+        image.write(bytes([byte]))
+
+def FindBlockSet(folder_content, cmd, image, boot_info, size):
+    #bitmap_size is the number of blocks used by the bitmap
+    # bitmap_indexes = boot_info['blocks_quantity']
+    # go to the bitmap
+    image = WalkImage(image, boot_info, 1)
+    # numbers of blocks needed to store the file
+    blocks_needed = ceil((size + 16)/boot_info['block_size'])
+    # list the starting block and sequence of free blocks next to it
+    free_blocks = []
+    free_blocks.append([])
+    blocks_for_thing = []
+    # all blocks are free are with value 0
+    #blocks_left = boot_info['blocks_quantity']
+    blocks_left = 20
+    set = 0
+    i = 0
+    checked = 0
+
+    while blocks_left:
+        #bitmap_byte read one byte at a time of the bitmap
+        bitmap_byte = image.read(1)
+        # checks each bit of the byte
+        for j in range(8):
+            if not blocks_left:
+                break
+        # checks if it is free and adds it to the list of free blocks
+            if  (~bitmap_byte[0]) & (1 << 8-(j+1)):
+                free_blocks[set].append(i*8+j)
+            else:
+                if free_blocks[set]:
+                    set += 1
+                    free_blocks.append([])
+            blocks_left -= 1
+        for j in range(checked, len(free_blocks)):
+            if len(free_blocks[j]) >= blocks_needed:
+                blocks_for_thing += free_blocks[j][:blocks_needed]
+                UpdateBitmap(image, boot_info, blocks_for_thing)
+                return blocks_for_thing
+            print(len(free_blocks[j]), checked)
+            checked = len(free_blocks[j]) - 1
+        i += 1
+    #sum all the elements inside free_blocks list
+    print(free_blocks)
+    sum = 0
+    for i in range(len(free_blocks)):
+        sum += len(free_blocks[i])
+    if sum < blocks_needed:
+        print("Nao é possível armazenar todos os arquivos")
+        return None
+
+
+    #sort the list of lists of free blocks by the size of the list
+    free_blocks.sort(key=len, reverse=True)
+    size_get = 0
+    for i in range(len(free_blocks)):
+        size_get_iteration = min(size - size_get, len(free_blocks[i]) * boot_info['block_size'])
+        size_get += size_get_iteration - 16
+        blocks_get_iteration = ceil(size_get_iteration/boot_info['block_size'])
+        blocks_for_thing += free_blocks[i][:blocks_get_iteration]
+        if size_get >= size:
+            UpdateBitmap(image, boot_info, blocks_for_thing)
+            return blocks_for_thing
+
 def CreateDirectory(folder_content, cmd, image, boot_info):   #Lucas
+    image = WalkImage(image, boot_info, 1)
+    x = image.read(30)
+    print(x)
+    x = FindBlockSet(folder_content, cmd, image, boot_info, 500)
+    print(x)
+    image = WalkImage(image, boot_info, 1)
+    x = image.read(30)
+    print(x)
     pass
 
 def TransferToDisc(folder_content, cmd, image, boot_info):    #Lucas
-    pass
+    # start all the variables needed
+    file = b''
+    file_number = int(cmd[2:])
+    super_block_begin = folder_content[file_number][2]
+    size_left = folder_content[file_number][1]
+    image = WalkImage(image, boot_info, super_block_begin)
+
+    # read all the blocks of the file and get the data in raw format
+    next_block = 0
+    while next_block != FF8BYTES and size_left:
+        next_block = int.from_bytes(image.read(8), 'little')
+        block_size = int.from_bytes(image.read(8), 'little')
+        read_block = block_size * boot_info['block_size'] - 16
+        file += image.read(min(read_block, size_left))
+        size_left -= read_block
+
+    # Duvida: se importar com ser little endian ou big endian na hora de escrever?
+    # write file to disc as bytes
+    filename = input('Digite o nome do arquivo em que deseja salvar\n')
+    with open(filename, 'wb') as f:
+        f.write(file)
 
 def WriteToSuperMini(folder_content, cmd, image, boot_info):  #Igor
     pass
