@@ -119,10 +119,59 @@ def TransferToDisc(folder_content, cmd, image, boot_info):    #Lucas
 def WriteToSuperMini(folder_content, cmd, image, boot_info):  #Igor
     pass
 
+def MenuFormat(boot_info):
+    size = boot_info['blocks_quantity']*boot_info['block_size']
+    current_size = 0
+    while current_size != size:
+        print('Insira o número de blocos da imagem SuperMini.')
+        current_quantity = boot_info['blocks_quantity']
+        print(f'(O atual número é de {current_quantity} blocos)')
+        blocks_quantity = input('O número deve ser entre 4 e 2^64.\n')
+        while blocks_quantity<4 or blocks_quantity>2**64:
+            blocks_quantity = input('O número deve ser entre 4 e 2^64.\n')
+
+        print('\nInsira o expoente de 2 para o tamanho de bloco da imagem SuperMini.')
+        current_quantity = boot_info['block_size']
+        print(f'(O atual tamanho é de 2^{current_quantity}({2**current_quantity} B/bloco))')
+        block_size = input('O número deve ser entre 9 (512 B/bloco) e 12 (4096 B/bloco).\n')
+        while block_size<9 or block_size>12:
+            block_size = input('O número deve ser entre 9 (512 B/bloco) e 12 (4096 B/bloco).\n')
+        
+        current_size = blocks_quantity*block_size
+        if current_size!=size:
+            print(f'ERRO! O tamanho final do disco deve ser de {size} B! O tamanho informado é de {current_size} B.')
+            clear()
+    
+    return blocks_quantity, block_size
+
+def MenuNewImg():
+    pass
+
 def FormatImg(folder_content, cmd, image, boot_info):         #Mahat
+    print('ATENÇÃO: A imagem atual será formatada e todos os dados serão perdidos.')
+    choice = input('Deseja continuar? (S/N)')
+    if choice != 'S':
+        ShowFolder(folder_content, image, boot_info)
+    else:
+        clear()
+        blocks_quantity, block_size = MenuFormat(boot_info)
+        print(blocks_quantity, block_size)
+
     pass
 
 def CriarImagem():          #Mahato
+    image_name = input('Insira o nome da imagem que deseja criar com sufixo \'.img\'. Ex: \'teste.img\'\n')
+
+    print('Insira o número de blocos da imagem SuperMini.')
+    blocks_quantity = input('O número deve ser entre 4 e 2^64.\n')
+    while blocks_quantity<4 or blocks_quantity>2**64:
+        blocks_quantity = input('O número deve ser entre 4 e 2^64.\n')
+
+    print('\nInsira o expoente de 2 para o tamanho de bloco da imagem SuperMini.')
+    block_size = input('O número deve ser entre 9 (512 B/bloco) e 12 (4096 B/bloco).\n')
+    while block_size<9 or block_size>12:
+        block_size = input('O número deve ser entre 9 (512 B/bloco) e 12 (4096 B/bloco).\n')
+    
     pass
 
 def ShowHelp(folder_content, cmd, image, boot_info):     
@@ -145,7 +194,7 @@ def ShowHelp(folder_content, cmd, image, boot_info):
     print('T - Transferir do SuperMini para o disco. O parâmetro deve ser o índice do arquivo a ser transferido.')
     print('    Ex: T 12')
     print()
-    
+
     back_input = input('Insira X para voltar ao diretório anterior.\n')
     while back_input.upper() != 'X':
         back_input = input('Insira X para voltar ao diretório anterior.\n')
