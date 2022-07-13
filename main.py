@@ -114,8 +114,8 @@ def FindBlockSet(folder_content, cmd, image, boot_info, size):
     free_blocks.append([])
     blocks_for_thing = []
     # all blocks are free are with value 0
-    #blocks_left = boot_info['blocks_quantity']
-    blocks_left = 20
+    blocks_left = boot_info['blocks_quantity']
+    #blocks_left = 20
     set = 0
     i = 0
     checked = 0
@@ -199,11 +199,17 @@ def TransferToDisc(folder_content, cmd, image, boot_info):    #Lucas
         f.write(file)
 
 def WriteToSuperMini(folder_content, cmd, image, boot_info):  #Igor
-    file_size = os.path.getsize(cmd[2:])
-    file_to_copy = open(cmd[2:], 'rb')
+    file_name = cmd[2:]
+    file_size = os.path.getsize(file_name)
+    
+    #store position to insert miniblock
+    #go back one position due to Read_Folder extra read
+    folder_position = image.tell()-1
+
+    file_to_copy = open(file_name, 'rb')
     block_sequence = FindBlockSet(folder_content, cmd, image, boot_info, file_size)
     if block_sequence == None: return
-
+    #print(block_sequence)
     super_blocks = []
     block_set = []
     #Build super_blocks in a structure segemented insuperblocks and blocks
@@ -216,8 +222,9 @@ def WriteToSuperMini(folder_content, cmd, image, boot_info):  #Igor
             super_blocks.append(block_set[:])
             block_set = []
 
-    print(f'Inserindo arquivo nos blocos {super_blocks}')
+    #print(f'Inserindo arquivo nos blocos {super_blocks}')
     
+    #Copia conteudo para os superblocos
     for super_block in range(len(super_blocks)):
         #go to beginning of superblock
         image = WalkImage(image, boot_info, super_blocks[super_block][0])
@@ -233,6 +240,19 @@ def WriteToSuperMini(folder_content, cmd, image, boot_info):  #Igor
         super_block_content = file_to_copy.read(space_left_in_superblock)
         image.write(super_block_content)
 
+    #create file miniblock now that we have the first block
+    image.seek(folder_position)
+    image.write(b'\x20')
+    image.write(file_size.to_bytes(7, 'little'))
+    image.write(super_blocks[0][0].to_bytes(8, 'little'))
+
+    name_miniblocks = [(file_name[i:i+15]) for i in range(0, len(file_name), 15)]
+    for name_miniblock in name_miniblocks:
+        image.write(b'\x40')
+        image.write(bytes(name_miniblock, 'ASCII'))
+
+    folder_content.append([file_name, file_size, super_blocks[0][0], b'\x20'])
+    ShowFolder(folder_content, image, boot_info)
     pass
 
 def ShowFile(image, boot_info, folder_content, thing_index):
