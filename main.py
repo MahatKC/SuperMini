@@ -1,4 +1,4 @@
-from math import ceil
+from math import ceil, log2
 import os
 from os.path import exists
 from datetime import datetime, time
@@ -235,21 +235,6 @@ def WriteToSuperMini(folder_content, cmd, image, boot_info):  #Igor
 
     pass
 
-def MenuNewImg():
-    pass
-
-def FormatImg(folder_content, cmd, image, boot_info):         #Mahat
-    print('ATENÇÃO: A imagem atual será formatada e todos os dados serão perdidos.')
-    choice = input('Deseja continuar? (S/N)')
-    if choice != 'S':
-        ShowFolder(folder_content, image, boot_info)
-    else:
-        clear()
-        blocks_quantity, block_size = MenuFormat(boot_info)
-        print(blocks_quantity, block_size)
-
-    pass
-
 def ShowFile(image, boot_info, folder_content, thing_index):
     next_block = 0
     size_in_bytes = folder_content[thing_index][1]
@@ -274,45 +259,115 @@ def WalkImage(image, boot_info, block):
     image.seek(block * boot_info['block_size'])
     return image
 
+def CreateImage(image_name, blocks_quantity, block_size_log2):
+    block_size = int(2**block_size_log2)
+    
+    image = open(image_name, 'wb')
+    image.write(b'supmini')
+
+    image.write(blocks_quantity.to_bytes(8, byteorder='little'))
+    image.write(block_size_log2.to_bytes(1, byteorder='little'))
+
+    boot_pointer = 0
+    image.write(boot_pointer.to_bytes(8, byteorder='little'))
+
+    root_next_block = FF8BYTES
+    image.write(root_next_block.to_bytes(8, byteorder='little'))
+
+    root_miniblock_atribute = 16
+    image.write(root_miniblock_atribute.to_bytes(16, byteorder='little'))
+
+    root_miniblock_name = 11840
+    image.write(root_miniblock_name.to_bytes(16, byteorder='little'))
+    
+    size_left_in_block_0 = block_size - 64
+    image.write((0).to_bytes(size_left_in_block_0, byteorder='little'))
+
+    bitmap = '1'
+    bitmap_size_in_blocks = ceil(blocks_quantity/(8*block_size))
+    bitmap += '1'*bitmap_size_in_blocks
+    number_of_free_blocks = blocks_quantity - (bitmap_size_in_blocks+1)
+    bitmap += '0'*number_of_free_blocks
+    number_of_unusable_bitmap_bits = (bitmap_size_in_blocks*block_size*8)-len(bitmap)
+    bitmap += '1'*number_of_unusable_bitmap_bits
+    bitmap_int_value = int(bitmap,2)
+    bytes_used_in_bitmap_for_bitmap_blocks = ceil(len(bitmap)/8)
+    image.write(bitmap_int_value.to_bytes(bytes_used_in_bitmap_for_bitmap_blocks, byteorder='big'))
+    
+    remaning_bytes = (blocks_quantity-(bitmap_size_in_blocks+1))*block_size
+    if remaning_bytes > 1048576:    #se falta mais que 1 megabyte
+        print('Aguarde, formatação em andamento.')
+        batch_writes = remaning_bytes//1048576
+
+        for i in range(batch_writes):
+            if i%512==0:
+                print(f'{round((100*i)/batch_writes)}% concluída.')
+            image.write((0).to_bytes(1048576, byteorder='little'))
+        final_bytes = remaning_bytes%1048576
+        if final_bytes!=0:
+            image.write((0).to_bytes(final_bytes, byteorder='little'))
+    else:
+        image.write((0).to_bytes(remaning_bytes, byteorder='little'))
+
+    print('Formatação realizada com sucesso. Aguarde para reiniciar a aplicação.')
+    image.close()
+    exit()
+    
+
 def CriarImagem():          #Mahato
     image_name = input('Insira o nome da imagem que deseja criar com sufixo \'.img\'. Ex: \'teste.img\'\n')
 
     print('Insira o número de blocos da imagem SuperMini.')
-    blocks_quantity = input('O número deve ser entre 4 e 2^64.\n')
+    blocks_quantity = int(input('O número deve ser entre 4 e 2^64.\n'))
     while blocks_quantity<4 or blocks_quantity>2**64:
-        blocks_quantity = input('O número deve ser entre 4 e 2^64.\n')
+        blocks_quantity = int(input('O número deve ser entre 4 e 2^64.\n'))
 
     print('\nInsira o expoente de 2 para o tamanho de bloco da imagem SuperMini.')
-    block_size = input('O número deve ser entre 9 (512 B/bloco) e 12 (4096 B/bloco).\n')
+    block_size = int(input('O número deve ser entre 9 (512 B/bloco) e 12 (4096 B/bloco).\n'))
     while block_size<9 or block_size>12:
-        block_size = input('O número deve ser entre 9 (512 B/bloco) e 12 (4096 B/bloco).\n')
+        block_size = int(input('O número deve ser entre 9 (512 B/bloco) e 12 (4096 B/bloco).\n'))
     
+    CreateImage(image_name, blocks_quantity, block_size)
+
     pass
 
 def MenuFormat(boot_info):
     size = boot_info['blocks_quantity']*boot_info['block_size']
     current_size = 0
     while current_size != size:
-        print('Insira o número de blocos da imagem SuperMini.')
         current_quantity = boot_info['blocks_quantity']
-        print(f'(O atual número é de {current_quantity} blocos)')
-        blocks_quantity = input('O número deve ser entre 4 e 2^64.\n')
+        print(f'Insira o número de blocos da imagem SuperMini. (O atual número é de {current_quantity} blocos)')
+        blocks_quantity = int(input('O número deve ser entre 4 e 2^64.\n'))
         while blocks_quantity<4 or blocks_quantity>2**64:
-            blocks_quantity = input('O número deve ser entre 4 e 2^64.\n')
+            blocks_quantity = int(input('O número deve ser entre 4 e 2^64.\n'))
 
-        print('\nInsira o expoente de 2 para o tamanho de bloco da imagem SuperMini.')
         current_quantity = boot_info['block_size']
-        print(f'(O atual tamanho é de 2^{current_quantity}({2**current_quantity} B/bloco))')
-        block_size = input('O número deve ser entre 9 (512 B/bloco) e 12 (4096 B/bloco).\n')
+        current_quantity_log2 = int(log2(current_quantity))
+        print(f'\nInsira o expoente de 2 para o tamanho de bloco da imagem SuperMini. (O atual tamanho é de 2^{current_quantity_log2} ({current_quantity} B/bloco))')
+        block_size = int(input('O número deve ser entre 9 (512 B/bloco) e 12 (4096 B/bloco).\n'))
         while block_size<9 or block_size>12:
-            block_size = input('O número deve ser entre 9 (512 B/bloco) e 12 (4096 B/bloco).\n')
+            block_size = int(input('O número deve ser entre 9 (512 B/bloco) e 12 (4096 B/bloco).\n'))
         
-        current_size = blocks_quantity*block_size
+        current_size = blocks_quantity*(2**block_size)
         if current_size!=size:
-            print(f'ERRO! O tamanho final do disco deve ser de {size} B! O tamanho informado é de {current_size} B.')
             clear()
+            print(f'ERRO! O tamanho final do disco deve ser de {size} B! O tamanho informado é de {current_size} B.\n')
     
     return blocks_quantity, block_size
+
+def FormatImg(folder_content, cmd, image, boot_info):         #Mahat
+    print('ATENÇÃO: A imagem atual será formatada e todos os dados serão perdidos.')
+    choice = input('Deseja continuar? (S/N) ')
+    if choice.upper() != 'S':
+        ShowFolder(folder_content, image, boot_info)
+    else:
+        clear()
+        blocks_quantity, block_size = MenuFormat(boot_info)
+        current_image_name = image.name
+        image.close()
+        CreateImage(current_image_name, blocks_quantity, block_size)
+
+    pass
 
 def Fechar(folder_content, cmd, image, boot_info):
     clear()
@@ -393,7 +448,7 @@ def Startup():
         while invalid_image:
             filename = input('Digite o nome da imagem SuperMini que deseja acessar\n')
             while not exists(filename):
-                filename = print('Arquivo não encontrado!')
+                filename = input('Arquivo não encontrado!\n')
             
             image = open(filename, 'rb+')
             boot_info = read_boot(image)
