@@ -30,8 +30,12 @@ def Read_Folder(image, boot_info, isRoot):
     if isRoot:
         image.seek(24)
 
+    folder_content = []
+    concatenate = False
     while next_block != FF8BYTES:
         next_block = int.from_bytes(image.read(8), 'little')
+        if next_block != FF8BYTES and next_block:
+            print('next block: '+str(next_block), image.tell())
 
         if isRoot:
             super_block_size = 1
@@ -43,31 +47,38 @@ def Read_Folder(image, boot_info, isRoot):
         size_left = boot_info['block_size'] * super_block_size - size_used
 
         mini_block_attribute = image.read(1)
-        folder_content = []
+        if mini_block_attribute == b'\x40':
+            concatenate = True
         while size_left:
+            thing_name = ''
             if mini_block_attribute == b'\x00':
                 break
-            thing_size = int.from_bytes(image.read(7), 'little')
-            first_block = int.from_bytes(image.read(8), 'little')
-            size_left -= 16
-            thing_name = ''
-            thing_attribute = mini_block_attribute
-            mini_block_attribute = image.read(1)
+            if not concatenate:
+                thing_size = int.from_bytes(image.read(7), 'little')
+                first_block = int.from_bytes(image.read(8), 'little')
+                size_left -= 16
+                thing_attribute = mini_block_attribute
+                mini_block_attribute = image.read(1)
             while mini_block_attribute == b'\x40' and size_left:
                 thing_name += image.read(15).decode('ASCII')
                 size_left -= 16
                 mini_block_attribute = image.read(1)
             thing_name = thing_name.split(chr(0))[0]
-            folder_content.append([thing_name, thing_size, first_block, thing_attribute])
+            if concatenate:
+                folder_content[-1][0] += thing_name
+                concatenate = False
+            else:
+                folder_content.append([thing_name, thing_size, first_block, thing_attribute])
         if next_block and next_block != FF8BYTES:
             image = WalkImage(image, boot_info, next_block)
-
+        if next_block != FF8BYTES and next_block:
+            print(folder_content)
     image.seek(image.tell()-1)   
     
     return folder_content
 
 def ShowFolder(folder_content, image, boot_info):
-    #clear()
+    clear()
 
     max_name = 0
     for content in folder_content:
@@ -81,7 +92,7 @@ def ShowFolder(folder_content, image, boot_info):
             line += '/'+content[0]+' '*(max_name-len(content[0]))+str(content[1])+'B'
         else:
             line += content[0]+' '*(max_name-len(content[0]))+str(content[1])+'B'
-        print(line)
+        print(line, len(folder_content[index][0]))
 
     UserInterface(folder_content, image, boot_info)
     pass
@@ -151,8 +162,7 @@ def CreateBlockSet(image, boot_info, size):
     for i in range(len(free_blocks)):
         sum += len(free_blocks[i])
     if sum < blocks_needed:
-        print("Não é possível armazenar todos os arquivos")
-        return None
+        exit("ERRO: Não houve espaço disponível na imagem. Operação interrompida!")
 
     #sort the list of lists of free blocks by the size of the list
     free_blocks.sort(key=len, reverse=True)
@@ -233,20 +243,17 @@ def WriteMiniBlockName(image, text):
 
 def CreateNewDir(image, boot_info, parent_block):
     blocks = CreateBlockSet(image, boot_info, 80)
-    if blocks is None:
-        print("Nao foi possivel alocar o diretório")
-    else:
-        image = WalkImage(image, boot_info, blocks[0])
-        image.write(int.to_bytes(FF8BYTES, 8, 'little'))
-        image.write(int.to_bytes(1, 8, 'little'))
-        WriteMiniBlock(image, b'\x10', 0, blocks[0])
-        WriteMiniBlockName(image, ".")
-        WriteMiniBlock(image, b'\x10', 0, parent_block)
-        WriteMiniBlockName(image, "..")
+    image = WalkImage(image, boot_info, blocks[0])
+    image.write(int.to_bytes(FF8BYTES, 8, 'little'))
+    image.write(int.to_bytes(1, 8, 'little'))
+    WriteMiniBlock(image, b'\x10', 0, blocks[0])
+    WriteMiniBlockName(image, ".")
+    WriteMiniBlock(image, b'\x10', 0, parent_block)
+    WriteMiniBlockName(image, "..")
     return blocks[0]
 
 
-def CreateDirectory(folder_content, cmd, image, boot_info):   #Lucas
+def CreateDirectory(folder_content, cmd, image, boot_info):
     dir_name = cmd[2:]
     miniblocks_needed = 1 + (ceil(len(dir_name)/15))
     blocks = None
@@ -265,12 +272,8 @@ def CreateDirectory(folder_content, cmd, image, boot_info):   #Lucas
     if miniblocks_free < miniblocks_needed:
         # if you don't have enough, create more blocks
         blocks = CreateBlockSet(image, boot_info, dir_size_needed - miniblocks_free * 16)
-        if blocks is None:
-            print("Não é possível armazenar todos os arquivos")
-            return
 
-        # if blocks are sequential, increase the superblock size
-        elif blocks[0] == folder_content[0][2] + superblock_size:
+        if blocks[0] == folder_content[0][2] + superblock_size:
             image = WalkImage(image, boot_info, current_block)
             x = int.from_bytes(image.read(8), 'little')
             image.write((superblock_size + len(blocks)).to_bytes(8, byteorder='little'))
@@ -340,7 +343,7 @@ def CreateDirectory(folder_content, cmd, image, boot_info):   #Lucas
         if folder_content[0][2] == 0:
             offset = 1
         size_left = superblock_size * boot_info['block_size'] - ((first_miniblock_free + 2 + offset) * 16)
-        while name_len > 15:
+        while name_len >= 15:
             if size_left == 0:
                 image = WalkImage(image, boot_info, next_block)
                 next_block = int.from_bytes(image.read(8), byteorder='little')
@@ -354,7 +357,7 @@ def CreateDirectory(folder_content, cmd, image, boot_info):   #Lucas
     folder_content = Read_Folder(image, boot_info, folder_content[0][2] == 0)
     ShowFolder(folder_content, image, boot_info)
 
-def TransferToDisc(folder_content, cmd, image, boot_info):    #Lucas
+def TransferToDisc(folder_content, cmd, image, boot_info): 
     # start all the variables needed
     file = b''
     file_number = int(cmd[2:])
@@ -561,7 +564,7 @@ def CreateImage(image_name, blocks_quantity, block_size_log2):
     exit()
     
 
-def CriarImagem():          #Mahato
+def CriarImagem():        
     image_name = input('Insira o nome da imagem que deseja criar com sufixo \'.img\'. Ex: \'teste.img\'\n')
 
     print('Insira o número de blocos da imagem SuperMini.')
@@ -597,18 +600,18 @@ def MenuFormat(boot_info):
         
         current_size = blocks_quantity*(2**block_size)
         if current_size!=size:
-            #clear()
+            clear()
             print(f'ERRO! O tamanho final do disco deve ser de {size} B! O tamanho informado é de {current_size} B.\n')
     
     return blocks_quantity, block_size
 
-def FormatImg(folder_content, cmd, image, boot_info):         #Mahat
+def FormatImg(folder_content, cmd, image, boot_info):        
     print('ATENÇÃO: A imagem atual será formatada e todos os dados serão perdidos.')
     choice = input('Deseja continuar? (S/N) ')
     if choice.upper() != 'S':
         ShowFolder(folder_content, image, boot_info)
     else:
-        #clear()
+        clear()
         blocks_quantity, block_size = MenuFormat(boot_info)
         current_image_name = image.name
         image.close()
@@ -617,7 +620,7 @@ def FormatImg(folder_content, cmd, image, boot_info):         #Mahat
     pass
 
 def Fechar(folder_content, cmd, image, boot_info):
-    #clear()
+    clear()
     print('Obrigado por utilizar o SuperMini!')
     now = datetime.now().time()
     if now >= time(5,00) and now <= time(12,00): 
@@ -630,7 +633,7 @@ def Fechar(folder_content, cmd, image, boot_info):
     exit()
 
 def ShowHelp(folder_content, cmd, image, boot_info):     
-    #clear() 
+    clear() 
     print('Todos os comandos seguem a seguinte sintaxe: \'X args\'')
     print('Substitua X pela letra correspondente ao comando desejada e args pelos parâmetros necessários ao comando.')
     print('Não esqueça de colocar um espaço entre o comando e seus parâmetros!')
