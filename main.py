@@ -92,7 +92,7 @@ def ShowFolder(folder_content, image, boot_info):
             line += '/'+content[0]+' '*(max_name-len(content[0]))+str(content[1])+'B'
         else:
             line += content[0]+' '*(max_name-len(content[0]))+str(content[1])+'B'
-        print(line, len(folder_content[index][0]))
+        print(line)
 
     UserInterface(folder_content, image, boot_info)
     pass
@@ -172,11 +172,14 @@ def CreateBlockSet(image, boot_info, size):
         size_get += size_get_iteration - 16
         blocks_get_iteration = ceil(size_get_iteration/boot_info['block_size'])
         blocks_for_thing += free_blocks[i][:blocks_get_iteration]
+        print(f"size: {size}, size_get: {size_get}, size_get_iteration: {size_get_iteration}")
         if size_get >= size:
             blocks_for_thing.sort()
             UpdateBitmap(image, boot_info, blocks_for_thing)
             CreateBlocks(image, boot_info, blocks_for_thing)
             return blocks_for_thing
+
+    print('escapou')
 
 def CreateBlocks(image, boot_info, blocks_for_thing):
     first_block = blocks_for_thing[0]
@@ -394,7 +397,8 @@ def WriteToSuperMini(folder_content, cmd, image, boot_info):
 
     file_to_copy = open(file_name, 'rb')
     block_sequence = CreateBlockSet(image, boot_info, file_size)
-    if block_sequence == None: return
+    if block_sequence == None: 
+        return
     super_blocks = []
     block_set = []
     #Build super_blocks in a structure segemented insuperblocks and blocks
@@ -407,7 +411,6 @@ def WriteToSuperMini(folder_content, cmd, image, boot_info):
             super_blocks.append(block_set[:])
             block_set = []
 
-    
     #Copia conteudo para os superblocos
     for super_block in range(len(super_blocks)):
         #go to beginning of superblock
@@ -474,7 +477,6 @@ def WriteToSuperMini(folder_content, cmd, image, boot_info):
             image.read(17)
         else:
             image.seek(image.tell()-7)
-
 
         image.write(name_block_sequence[0].to_bytes(8, byteorder='little'))
 
@@ -556,6 +558,7 @@ def CreateImage(image_name, blocks_quantity, block_size_log2):
         final_bytes = remaning_bytes%1048576
         if final_bytes!=0:
             image.write((0).to_bytes(final_bytes, byteorder='little'))
+        print(f'100% concluída.')
     else:
         image.write((0).to_bytes(remaning_bytes, byteorder='little'))
 
