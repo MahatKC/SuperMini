@@ -42,8 +42,6 @@ def Read_Folder(image, boot_info, isRoot):
         isRoot = False
         size_left = boot_info['block_size'] * super_block_size - size_used
 
-        if next_block != 0:
-
         mini_block_attribute = image.read(1)
         folder_content = []
         while size_left:
@@ -394,7 +392,6 @@ def WriteToSuperMini(folder_content, cmd, image, boot_info):
     file_to_copy = open(file_name, 'rb')
     block_sequence = CreateBlockSet(image, boot_info, file_size)
     if block_sequence == None: return
-    #print(block_sequence)
     super_blocks = []
     block_set = []
     #Build super_blocks in a structure segemented insuperblocks and blocks
@@ -407,7 +404,6 @@ def WriteToSuperMini(folder_content, cmd, image, boot_info):
             super_blocks.append(block_set[:])
             block_set = []
 
-    #print(f'Inserindo arquivo nos blocos {super_blocks}')
     
     #Copia conteudo para os superblocos
     for super_block in range(len(super_blocks)):
