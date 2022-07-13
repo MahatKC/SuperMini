@@ -401,16 +401,54 @@ def WriteToSuperMini(folder_content, cmd, image, boot_info):
     image.write(file_size.to_bytes(7, 'little'))
     image.write(super_blocks[0][0].to_bytes(8, 'little'))
 
+    #store folder position gp go back after counting
+    folder_position = image.tell()
+
+    #count available space for the name in folder block
+    available_space_for_name = 0
+    while image.read(1) == b'\x00':
+        available_space_for_name += 15
+        image.read(15)
+
+    #if theres no space in superblock allocate space for the rest of it
+    estouro_de_nome = False
+    if available_space_for_name < len(file_name):
+        estouro_de_nome = True
+        extra_name_size = ceil((len(file_name)-available_space_for_name)/15)+(len(file_name)-available_space_for_name)
+        name_block_sequence = CreateBlockSet(image, boot_info, extra_name_size)
+        if name_block_sequence == None: return
+
+    #write name miniblocks
+    image.seek(folder_position)
     name_miniblocks = [(file_name[i:i+15]) for i in range(0, len(file_name), 15)]
-    print(name_miniblocks)
+    superblock_to_write = -1
     for name_miniblock in name_miniblocks:
+        if image.read(1) != b'\x00':
+            WalkImage(image, boot_info, name_block_sequence[superblock_to_write])
+            #image.read(16)
+            image.write(int.to_bytes(FF8BYTES, 8, 'little'))
+            image.write(int.to_bytes(len(name_block_sequence), 8, 'little'))
+        else:
+            image.seek(image.tell()-1)
         image.write(b'\x40')
         image.write(bytes(name_miniblock, 'ASCII'))
-    print(len(name_miniblocks[-1]))
-    print(b'\x00'*(15-len(name_miniblocks[-1])))
     image.write(b'\x00'*(15-len(name_miniblocks[-1])))
     
+    #update folder content
     folder_content.append([file_name, file_size, super_blocks[0][0], b'\x20'])
+
+    if estouro_de_nome:
+        #set folder next superblock
+        WalkImage(image, boot_info, folder_content[0][2])
+        #test if it is root first block, skip bootrecord if it is, go back if its not
+        if image.read(7) == b'supmini':
+            image.read(17)
+        else:
+            image.seek(image.tell()-7)
+
+
+        image.write(name_block_sequence[0].to_bytes(8, byteorder='little'))
+
     ShowFolder(folder_content, image, boot_info)
     pass
 
@@ -533,7 +571,7 @@ def MenuFormat(boot_info):
         
         current_size = blocks_quantity*(2**block_size)
         if current_size!=size:
-            clear()
+            #clear()
             print(f'ERRO! O tamanho final do disco deve ser de {size} B! O tamanho informado é de {current_size} B.\n')
     
     return blocks_quantity, block_size
@@ -544,7 +582,7 @@ def FormatImg(folder_content, cmd, image, boot_info):         #Mahat
     if choice.upper() != 'S':
         ShowFolder(folder_content, image, boot_info)
     else:
-        clear()
+        #clear()
         blocks_quantity, block_size = MenuFormat(boot_info)
         current_image_name = image.name
         image.close()
@@ -553,7 +591,7 @@ def FormatImg(folder_content, cmd, image, boot_info):         #Mahat
     pass
 
 def Fechar(folder_content, cmd, image, boot_info):
-    clear()
+    #clear()
     print('Obrigado por utilizar o SuperMini!')
     now = datetime.now().time()
     if now >= time(5,00) and now <= time(12,00): 
@@ -566,7 +604,7 @@ def Fechar(folder_content, cmd, image, boot_info):
     exit()
 
 def ShowHelp(folder_content, cmd, image, boot_info):     
-    clear() 
+    #clear() 
     print('Todos os comandos seguem a seguinte sintaxe: \'X args\'')
     print('Substitua X pela letra correspondente ao comando desejada e args pelos parâmetros necessários ao comando.')
     print('Não esqueça de colocar um espaço entre o comando e seus parâmetros!')
