@@ -249,6 +249,7 @@ def CreateDirectory(folder_content, cmd, image, boot_info):   #Lucas
 
     current_block = folder_content[0][2]
     image = WalkImage(image, boot_info, folder_content[0][2])
+    print(folder_content[0][2])
     if folder_content[0][2] == 0:
         image.seek(24, 1)
     miniblocks_free, first_miniblock_free, current_block = ReadFreeMiniblocks(image, boot_info, miniblocks_needed, current_block)
@@ -313,7 +314,7 @@ def CreateDirectory(folder_content, cmd, image, boot_info):   #Lucas
             image.seek(first_miniblock_free * 16, 1)
         
         WriteMiniBlock(image, b'\x10', 0, first_block_new_dir)
-        size_left = superblock_size * boot_info['block_size'] - (first_miniblock_free + +2) * 16
+        size_left = superblock_size * boot_info['block_size'] - (first_miniblock_free + 2) * 16
         while name_len > 15:
             if size_left == 0:
                 image = WalkImage(image, boot_info, next_block)
@@ -324,6 +325,7 @@ def CreateDirectory(folder_content, cmd, image, boot_info):   #Lucas
             dir_name = dir_name[15:]
             name_len -= 15
             size_left -= 16
+    UserInterface(folder_content, image, boot_info)
 
 def TransferToDisc(folder_content, cmd, image, boot_info):    #Lucas
     # start all the variables needed
@@ -357,7 +359,7 @@ def WriteToSuperMini(folder_content, cmd, image, boot_info):  #Igor
     folder_position = image.tell()-1
 
     file_to_copy = open(file_name, 'rb')
-    block_sequence = FindBlockSet(folder_content, cmd, image, boot_info, file_size)
+    block_sequence = CreateBlockSet(folder_content, cmd, image, boot_info, file_size)
     if block_sequence == None: return
     #print(block_sequence)
     super_blocks = []
