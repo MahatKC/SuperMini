@@ -92,9 +92,9 @@ def OpenThing(folder_content, cmd, image, boot_info):
 
 def UpdateBitmap(image, boot_info, blocks_used):
     image = WalkImage(image, boot_info, 1)
-    print(blocks_used)
+    #print(blocks_used)
     for blocks in blocks_used:
-        print((blocks)//8)
+        #print((blocks)//8)
         image.seek(boot_info['block_size'] + (blocks)//8)
         # write 1 to bitmap at position of blocks used 
         byte = image.read(1)
@@ -140,11 +140,11 @@ def FindBlockSet(folder_content, cmd, image, boot_info, size):
                 blocks_for_thing += free_blocks[j][:blocks_needed]
                 UpdateBitmap(image, boot_info, blocks_for_thing)
                 return blocks_for_thing
-            print(len(free_blocks[j]), checked)
+            #print(len(free_blocks[j]), checked)
             checked = len(free_blocks[j]) - 1
         i += 1
     #sum all the elements inside free_blocks list
-    print(free_blocks)
+    #print(free_blocks)
     sum = 0
     for i in range(len(free_blocks)):
         sum += len(free_blocks[i])
@@ -199,6 +199,40 @@ def TransferToDisc(folder_content, cmd, image, boot_info):    #Lucas
         f.write(file)
 
 def WriteToSuperMini(folder_content, cmd, image, boot_info):  #Igor
+    file_size = os.path.getsize(cmd[2:])
+    file_to_copy = open(cmd[2:], 'rb')
+    block_sequence = FindBlockSet(folder_content, cmd, image, boot_info, file_size)
+    if block_sequence == None: return
+
+    super_blocks = []
+    block_set = []
+    #Build super_blocks in a structure segemented insuperblocks and blocks
+    for block in range(len(block_sequence)):
+        block_set.append(block_sequence[block])
+        if len(block_sequence)-1 == block:
+            super_blocks.append(block_set[:])
+            block_set = []
+        elif block_sequence[block]+1 != block_sequence[block+1]:
+            super_blocks.append(block_set[:])
+            block_set = []
+
+    print(f'Inserindo arquivo nos blocos {super_blocks}')
+    
+    for super_block in range(len(super_blocks)):
+        #go to beginning of superblock
+        image = WalkImage(image, boot_info, super_blocks[super_block][0])
+        #check if it is the last superblock
+        if len(super_blocks)-1 == super_block:
+            image.write(b'\xff\xff\xff\xff\xff\xff\xff\xff')
+        else:
+            image.write(super_blocks[super_block+1][0].to_bytes(1, 'little'))
+
+        image.write(len(super_blocks[super_block]).to_bytes(8,'little'))
+        space_left_in_superblock = len(super_blocks[super_block])*boot_info['block_size']-16
+
+        super_block_content = file_to_copy.read(space_left_in_superblock)
+        image.write(super_block_content)
+
     pass
 
 def MenuNewImg():
