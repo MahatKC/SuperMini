@@ -34,9 +34,6 @@ def Read_Folder(image, boot_info, isRoot):
     concatenate = False
     while next_block != FF8BYTES:
         next_block = int.from_bytes(image.read(8), 'little')
-        if next_block != FF8BYTES and next_block:
-            print('next block: '+str(next_block), image.tell())
-
         if isRoot:
             super_block_size = 1
             size_used = 32
@@ -71,8 +68,6 @@ def Read_Folder(image, boot_info, isRoot):
                 folder_content.append([thing_name, thing_size, first_block, thing_attribute])
         if next_block and next_block != FF8BYTES:
             image = WalkImage(image, boot_info, next_block)
-        if next_block != FF8BYTES and next_block:
-            print(folder_content)
     image.seek(image.tell()-1)   
     
     return folder_content
@@ -168,8 +163,8 @@ def CreateBlockSet(image, boot_info, size):
     free_blocks.sort(key=len, reverse=True)
     size_get = 0
     for i in range(len(free_blocks)):
-        size_get_iteration = min(size - size_get, len(free_blocks[i]) * boot_info['block_size'])
-        size_get += size_get_iteration - 16
+        size_get_iteration = min(size - size_get, len(free_blocks[i]) * boot_info['block_size'] - 16)
+        size_get += size_get_iteration
         blocks_get_iteration = ceil(size_get_iteration/boot_info['block_size'])
         blocks_for_thing += free_blocks[i][:blocks_get_iteration]
         print(f"size: {size}, size_get: {size_get}, size_get_iteration: {size_get_iteration}")
@@ -373,11 +368,12 @@ def TransferToDisc(folder_content, cmd, image, boot_info):
     while next_block != FF8BYTES and size_left:
         next_block = int.from_bytes(image.read(8), 'little')
         block_size = int.from_bytes(image.read(8), 'little')
-        read_block = block_size * boot_info['block_size'] - 16
-        file += image.read(min(read_block, size_left))
-        size_left -= read_block
+        read_block = block_size * boot_info['block_size'] # TO-DO: é - 16 ou nao?
+        size_taken = min(read_block, size_left)
+        file += image.read(size_taken)
+        size_left -= size_taken
+    # TO-DO: se importar em pedir se o usuário deseja que seja escrito little endian ou big endian antes de escrever?
 
-    # Duvida: se importar em pedir se o usuário deseja que seja escrito little endian ou big endian antes de escrever?
     # write file to disc as bytes
     filename = input('Digite o nome do arquivo em que deseja salvar\n')
     with open(filename, 'wb') as f:
