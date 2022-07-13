@@ -132,3 +132,7 @@ dmypy.json
 .pyre/
 fat.img
 test.py
+megabyte.img
+*.img
+*.csv
+teste.py
