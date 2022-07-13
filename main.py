@@ -58,6 +58,9 @@ def Read_Folder(image, boot_info, isRoot):
                 mini_block_attribute = image.read(1)
             thing_name = thing_name.split(chr(0))[0]
             folder_content.append([thing_name, thing_size, first_block, thing_attribute])
+    
+    image.seek(image.tell()-1)   
+    
     return folder_content
 
 def ShowFolder(folder_content, image, boot_info):
@@ -350,16 +353,16 @@ def TransferToDisc(folder_content, cmd, image, boot_info):    #Lucas
     with open(filename, 'wb') as f:
         f.write(file)
 
-def WriteToSuperMini(folder_content, cmd, image, boot_info):  #Igor
+def WriteToSuperMini(folder_content, cmd, image, boot_info):
     file_name = cmd[2:]
     file_size = os.path.getsize(file_name)
     
     #store position to insert miniblock
     #go back one position due to Read_Folder extra read
-    folder_position = image.tell()-1
+    folder_position = image.tell()
 
     file_to_copy = open(file_name, 'rb')
-    block_sequence = CreateBlockSet(folder_content, cmd, image, boot_info, file_size)
+    block_sequence = CreateBlockSet(image, boot_info, file_size)
     if block_sequence == None: return
     #print(block_sequence)
     super_blocks = []
@@ -399,10 +402,14 @@ def WriteToSuperMini(folder_content, cmd, image, boot_info):  #Igor
     image.write(super_blocks[0][0].to_bytes(8, 'little'))
 
     name_miniblocks = [(file_name[i:i+15]) for i in range(0, len(file_name), 15)]
+    print(name_miniblocks)
     for name_miniblock in name_miniblocks:
         image.write(b'\x40')
         image.write(bytes(name_miniblock, 'ASCII'))
-
+    print(len(name_miniblocks[-1]))
+    print(b'\x00'*(15-len(name_miniblocks[-1])))
+    image.write(b'\x00'*(15-len(name_miniblocks[-1])))
+    
     folder_content.append([file_name, file_size, super_blocks[0][0], b'\x20'])
     ShowFolder(folder_content, image, boot_info)
     pass
@@ -410,18 +417,21 @@ def WriteToSuperMini(folder_content, cmd, image, boot_info):  #Igor
 def ShowFile(image, boot_info, folder_content, thing_index):
     next_block = 0
     size_in_bytes = folder_content[thing_index][1]
+    file_extension = folder_content[thing_index][0].split('.')
     content = ''
+    if file_extension[-1] != 'txt':
+        print('Arquivo não pode ser exibido. Extensão não suportada por esta aplicação.')
+    else:
+        while next_block != FF8BYTES:
+            next_block = int.from_bytes(image.read(8), 'little')
+            super_block_size = int.from_bytes(image.read(8), 'little')
+            size_left_in_block = boot_info['block_size'] * super_block_size - 16
 
-    while next_block != FF8BYTES:
-        next_block = int.from_bytes(image.read(8), 'little')
-        super_block_size = int.from_bytes(image.read(8), 'little')
-        size_left_in_block = boot_info['block_size'] * super_block_size - 16
+            content += image.read(min(size_in_bytes, size_left_in_block)).decode('ASCII')
 
-        content += image.read(min(size_in_bytes, size_left_in_block)).decode('ASCII')
+            size_in_bytes -= size_left_in_block
 
-        size_in_bytes -= size_left_in_block
-
-    print(content)
+        print(content)
 
     UserInterface(folder_content, image, boot_info)
 
