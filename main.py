@@ -468,11 +468,12 @@ def CreateImage(image_name, blocks_quantity, block_size_log2):
     if remaning_bytes > 1048576:    #se falta mais que 1 megabyte
         print('Aguarde, formatação em andamento.')
         batch_writes = remaning_bytes//1048576
+        batch = (0).to_bytes(1048576, byteorder='little')
 
         for i in range(batch_writes):
             if i%512==0:
                 print(f'{round((100*i)/batch_writes)}% concluída.')
-            image.write((0).to_bytes(1048576, byteorder='little'))
+            image.write(batch)
         final_bytes = remaning_bytes%1048576
         if final_bytes!=0:
             image.write((0).to_bytes(final_bytes, byteorder='little'))
