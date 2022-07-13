@@ -4,6 +4,8 @@ from os.path import exists
 from datetime import datetime, time
 from re import ASCII
 
+from numpy import block
+
 FF8BYTES = 18446744073709551615      #VALOR INTEIRO DE FF PRA 8 BYTES
 
 def clear():
@@ -25,7 +27,6 @@ def read_boot(image):
 
 def Read_Folder(image, boot_info, isRoot):
     next_block = 0
-
     if isRoot:
         image.seek(24)
 
@@ -40,6 +41,8 @@ def Read_Folder(image, boot_info, isRoot):
             size_used = 16
         isRoot = False
         size_left = boot_info['block_size'] * super_block_size - size_used
+
+        if next_block != 0:
 
         mini_block_attribute = image.read(1)
         folder_content = []
@@ -58,7 +61,9 @@ def Read_Folder(image, boot_info, isRoot):
                 mini_block_attribute = image.read(1)
             thing_name = thing_name.split(chr(0))[0]
             folder_content.append([thing_name, thing_size, first_block, thing_attribute])
-    
+        if next_block and next_block != FF8BYTES:
+            image = WalkImage(image, boot_info, next_block)
+
     image.seek(image.tell()-1)   
     
     return folder_content
@@ -69,8 +74,8 @@ def ShowFolder(folder_content, image, boot_info):
     max_name = 0
     for content in folder_content:
         if len(content[0])>max_name:
-            max_name = len(content[0])+3
-
+            max_name = len(content[0])
+    max_name += 3
     for index in range(len(folder_content)):
         content = folder_content[index]
         line = str(index)+' - '
@@ -180,15 +185,16 @@ def CreateBlocks(image, boot_info, blocks_for_thing):
             superblock_size = 1
             image.seek(block * boot_info['block_size'])
             first_block = block
-        
-        #check all the blocks that are sequential
-        image.seek(boot_info['block_size'] * block)
-        image.write(bytes([0]*boot_info['block_size']))
+    
+
+    image.write(int.to_bytes(FF8BYTES, 8, 'little'))
+    image.write(int.to_bytes(superblock_size, 8, 'little'))
 
 def ReadFreeMiniblocks(image, boot_info, miniblocks_needed, current_block):
     next_block = 0 
     miniblocks_free = 0
     first_miniblock_free = None
+    superblock_size = 0
     while next_block != FF8BYTES:
         next_block = int.from_bytes(image.read(8), 'little')
         if current_block == 0:
@@ -212,10 +218,10 @@ def ReadFreeMiniblocks(image, boot_info, miniblocks_needed, current_block):
             size_left -= 16
             count += 1
             if miniblocks_free == miniblocks_needed:
-                return miniblocks_free, first_miniblock_free, current_block
+                return miniblocks_free, first_miniblock_free, current_block, superblock_size
         if next_block != FF8BYTES:
             current_block = next_block
-    return miniblocks_free, first_miniblock_free, current_block
+    return miniblocks_free, first_miniblock_free, current_block, superblock_size
 
 def WriteMiniBlock(image, type, size, block):
     image.write(type)
@@ -245,6 +251,7 @@ def CreateNewDir(image, boot_info, parent_block):
 def CreateDirectory(folder_content, cmd, image, boot_info):   #Lucas
     dir_name = cmd[2:]
     miniblocks_needed = 1 + (ceil(len(dir_name)/15))
+    blocks = None
     dir_size_needed = miniblocks_needed * 16
     # get the first byte and see if it is free, go on this until you find one
     # check if it has enough, if it doesn't, ask to create more blocks with the next
@@ -252,10 +259,9 @@ def CreateDirectory(folder_content, cmd, image, boot_info):   #Lucas
 
     current_block = folder_content[0][2]
     image = WalkImage(image, boot_info, folder_content[0][2])
-    print(folder_content[0][2])
     if folder_content[0][2] == 0:
         image.seek(24, 1)
-    miniblocks_free, first_miniblock_free, current_block = ReadFreeMiniblocks(image, boot_info, miniblocks_needed, current_block)
+    miniblocks_free, first_miniblock_free, current_block, superblock_size = ReadFreeMiniblocks(image, boot_info, miniblocks_needed, current_block)
     sequential = True
 
     if miniblocks_free < miniblocks_needed:
@@ -268,36 +274,40 @@ def CreateDirectory(folder_content, cmd, image, boot_info):   #Lucas
         # if blocks are sequential, increase the superblock size
         elif blocks[0] == folder_content[0][2] + superblock_size:
             image = WalkImage(image, boot_info, current_block)
-            image.read(8)
-            # to-do: discover the size of the superblock created and increase size of superblock
-            # to-do: write this size of superblock to image
+            x = int.from_bytes(image.read(8), 'little')
             image.write((superblock_size + len(blocks)).to_bytes(8, byteorder='little'))
 
             image = WalkImage(image, boot_info, blocks[0])
-            next_block = image.read(8)
+            next_block = int.from_bytes(image.read(8), 'little')
             superblock_size += int.from_bytes(image.read(8), byteorder='little')
             image = WalkImage(image, boot_info, blocks[0])
             image.write(int.to_bytes(0, 16, byteorder='little'))
             image = WalkImage(image, boot_info, current_block)
             image.write(int.to_bytes(next_block, 8, byteorder='little'))
             image.write(int.to_bytes(superblock_size, 8, byteorder='little'))
-            last_miniblock = miniblocks_free[-1]
-            #create a list incrementing by one
-            miniblocks_free += [i for i in range(last_miniblock + 1, miniblocks_needed - miniblocks_free)]
         else:
             image = WalkImage(image, boot_info, current_block)
             next_block = blocks[0]
-            image.write((next_block).to_bytes(8, byteorder='little'))
-            superblock_size = int.from_bytes(image.read(8), byteorder='little')
+            if folder_content[0][2] == 0:
+                image.seek(24, 1)
+                image.write((next_block).to_bytes(8, byteorder='little'))
+                superblock_size = 1
+            else:
+                image.write((next_block).to_bytes(8, byteorder='little'))
+                superblock_size = int.from_bytes(image.read(8), byteorder='little')
+
             sequential = False
 
     # create the directory
     first_block_new_dir = CreateNewDir(image, boot_info, folder_content[0][2])
-
+    
     name_len = len(dir_name)
     if sequential:
         # só escreve
-        image.seek(current_block * boot_info['block_size'] + first_miniblock_free * 16 + 32) 
+        offset = 16
+        if folder_content[0][2] == 0:
+            offset = 32
+        image.seek(current_block * boot_info['block_size'] + first_miniblock_free * 16 + offset) 
 
         WriteMiniBlock(image, b'\x10', 0, first_block_new_dir)
         while name_len > 15:
@@ -306,29 +316,45 @@ def CreateDirectory(folder_content, cmd, image, boot_info):   #Lucas
             name_len -= 15
         WriteMiniBlockName(image, dir_name[:name_len])
     else:
-        if first_miniblock_free is None:
-            image = WalkImage(image, boot_info, next_block * boot_info['block_size'])
-            next_block = int.from_bytes(image.read(8), byteorder='little')
-            superblock_size = int.from_bytes(image.read(8), byteorder='little')
+        if folder_content[0][2] == 0:
+            if first_miniblock_free is None:
+                image = WalkImage(image, boot_info, next_block * boot_info['block_size'])
+                next_block = int.from_bytes(image.read(8), byteorder='little')
+                superblock_size = int.from_bytes(image.read(8), byteorder='little')
+            else:
+                image.seek(24)
+                next_block = int.from_bytes(image.read(8), byteorder='little')
+                superblock_size = 1
+                image.seek(first_miniblock_free * 16, 1)
         else:
-            image = WalkImage(image, boot_info, current_block * boot_info['block_size'])
-            next_block = int.from_bytes(image.read(8), byteorder='little')
-            superblock_size = int.from_bytes(image.read(8), byteorder='little')
-            image.seek(first_miniblock_free * 16, 1)
+            if first_miniblock_free is None:
+                image = WalkImage(image, boot_info, next_block * boot_info['block_size'])
+                next_block = int.from_bytes(image.read(8), byteorder='little')
+                superblock_size = int.from_bytes(image.read(8), byteorder='little')
+            else:
+                image = WalkImage(image, boot_info, current_block * boot_info['block_size'])
+                next_block = int.from_bytes(image.read(8), byteorder='little')
+                superblock_size = int.from_bytes(image.read(8), byteorder='little')
+                image.seek(first_miniblock_free * 16, 1)
         
         WriteMiniBlock(image, b'\x10', 0, first_block_new_dir)
-        size_left = superblock_size * boot_info['block_size'] - (first_miniblock_free + 2) * 16
+        offset = 0
+        if folder_content[0][2] == 0:
+            offset = 1
+        size_left = superblock_size * boot_info['block_size'] - ((first_miniblock_free + 2 + offset) * 16)
         while name_len > 15:
             if size_left == 0:
                 image = WalkImage(image, boot_info, next_block)
                 next_block = int.from_bytes(image.read(8), byteorder='little')
                 superblock_size = int.from_bytes(image.read(8), byteorder='little')
                 size_left = superblock_size * boot_info['block_size'] - 16
-            WriteMiniBlockName(image, dir_name[:min(15)])
+            WriteMiniBlockName(image, dir_name[:min(15, size_left)])
             dir_name = dir_name[15:]
             name_len -= 15
             size_left -= 16
-    UserInterface(folder_content, image, boot_info)
+    image = WalkImage(image, boot_info, folder_content[0][2])
+    folder_content = Read_Folder(image, boot_info, folder_content[0][2] == 0)
+    ShowFolder(folder_content, image, boot_info)
 
 def TransferToDisc(folder_content, cmd, image, boot_info):    #Lucas
     # start all the variables needed
@@ -352,6 +378,10 @@ def TransferToDisc(folder_content, cmd, image, boot_info):    #Lucas
     filename = input('Digite o nome do arquivo em que deseja salvar\n')
     with open(filename, 'wb') as f:
         f.write(file)
+    
+    image = WalkImage(image, boot_info, folder_content[0][2])
+    folder_content = Read_Folder(image, boot_info, folder_content[0][2] == 0)
+    ShowFolder(folder_content, image, boot_info)
 
 def WriteToSuperMini(folder_content, cmd, image, boot_info):
     file_name = cmd[2:]
