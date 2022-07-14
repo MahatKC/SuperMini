@@ -167,14 +167,12 @@ def CreateBlockSet(image, boot_info, size):
         size_get += size_get_iteration
         blocks_get_iteration = ceil(size_get_iteration/boot_info['block_size'])
         blocks_for_thing += free_blocks[i][:blocks_get_iteration]
-        print(f"size: {size}, size_get: {size_get}, size_get_iteration: {size_get_iteration}")
         if size_get >= size:
             blocks_for_thing.sort()
             UpdateBitmap(image, boot_info, blocks_for_thing)
             CreateBlocks(image, boot_info, blocks_for_thing)
             return blocks_for_thing
 
-    print('escapou')
 
 def CreateBlocks(image, boot_info, blocks_for_thing):
     first_block = blocks_for_thing[0]
@@ -483,20 +481,17 @@ def ShowFile(image, boot_info, folder_content, thing_index):
     next_block = 0
     size_in_bytes = folder_content[thing_index][1]
     file_extension = folder_content[thing_index][0].split('.')
-    content = ''
-    if file_extension[-1] != 'txt':
-        print('Arquivo não pode ser exibido. Extensão não suportada por esta aplicação.')
-    else:
-        while next_block != FF8BYTES:
-            next_block = int.from_bytes(image.read(8), 'little')
-            super_block_size = int.from_bytes(image.read(8), 'little')
-            size_left_in_block = boot_info['block_size'] * super_block_size - 16
+    content = b''
+    while next_block != FF8BYTES:
+        next_block = int.from_bytes(image.read(8), 'little')
+        super_block_size = int.from_bytes(image.read(8), 'little')
+        size_left_in_block = boot_info['block_size'] * super_block_size - 16
 
-            content += image.read(min(size_in_bytes, size_left_in_block)).decode('ASCII')
+        content += image.read(min(size_in_bytes, size_left_in_block))
 
-            size_in_bytes -= size_left_in_block
+        size_in_bytes -= size_left_in_block
 
-        print(content)
+    print(content)
 
     UserInterface(folder_content, image, boot_info)
 
