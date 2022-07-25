@@ -3,7 +3,6 @@ import os
 from os.path import exists
 from datetime import datetime, time
 from re import ASCII
-
 from numpy import block
 
 FF8BYTES = 18446744073709551615      #VALOR INTEIRO DE FF PRA 8 BYTES
@@ -501,6 +500,73 @@ def WalkImage(image, boot_info, block):
     image.seek(block * boot_info['block_size'])
     return image
 
+def erase_bitmap(bitmap, initial_block, superblock_length):
+    zero_byte = (0).to_bytes(1, 'big')
+    
+    if initial_block%8!=0:
+        resto = initial_block%8
+        old_byte = bin(bitmap[initial_block//8])[2:]
+        if len(old_byte)<8:
+            old_byte = '0'*(8-len(old_byte))+old_byte
+        freed_bits = min((8-resto), superblock_length)
+        
+        new_byte = int(old_byte[:resto]+'0'*freed_bits+old_byte[resto+freed_bits:],2)
+        bitmap = bitmap[:(initial_block//8)] + new_byte.to_bytes(1,'big') + bitmap[(initial_block//8)+1:]
+        initial_block += 8-resto     #arredonda pra múltiplo de 8
+        superblock_length -= 8-resto
+    
+    if superblock_length>0:
+        for byte_block in range(superblock_length//8):
+            bitmap = bitmap[:(initial_block//8)+byte_block] + zero_byte + bitmap[(initial_block//8)+byte_block+1:]
+        
+        if superblock_length%8!=0:
+            resto = superblock_length%8
+            old_byte = bin(bitmap[superblock_length//8])[2:]
+            new_byte = int('0'*resto + old_byte[resto:],2)
+            bitmap = bitmap[:(initial_block+superblock_length)//8] + new_byte.to_bytes(1,'big') + bitmap[((initial_block+superblock_length)//8)+1:]
+
+    return bitmap
+
+def get_file_blocks(file_block, image, boot_info):
+    file_block_list = []
+    next_block = file_block
+
+    while next_block != FF8BYTES:
+        image = WalkImage(image, boot_info, next_block)
+        next_block = int.from_bytes(image.read(8), 'little')
+        superblock_size = int.from_bytes(image.read(8), 'little')
+        file_block_list.append([file_block, superblock_size])
+        file_block = next_block
+
+    return file_block_list
+
+def VerifyBitmap(folder_content, cmd, image, boot_info):
+    print("Aguarde. A imagem está sendo verificada.")
+    block_size = boot_info['block_size']
+    blocks_quantity = boot_info['blocks_quantity']
+
+    bitmap_size = ceil(blocks_quantity/(8*block_size))
+    image = WalkImage(image, boot_info, 1)
+    bitmap = image.read(bitmap_size*block_size)
+    bitmap = erase_bitmap(bitmap, 0, bitmap_size+1)
+
+    i = bitmap_size+1
+
+    while i<blocks_quantity:
+        if bitmap[i//8]==0:
+            i+=1
+        else:
+            byte_map = bin(bitmap[i//8])[2:]
+            first_one = byte_map.index('1')
+            file_block = i+first_one
+            file_block_list = get_file_blocks(file_block, image, boot_info)
+
+            for superblock in file_block_list:
+                bitmap = erase_bitmap(bitmap, superblock[0], superblock[1])
+            i += file_block_list[0][1]
+
+    Fechar(folder_content, cmd, image, boot_info)
+
 def CreateImage(image_name, blocks_quantity, block_size_log2):
     block_size = int(2**block_size_log2)
     
@@ -614,7 +680,7 @@ def FormatImg(folder_content, cmd, image, boot_info):
     pass
 
 def Fechar(folder_content, cmd, image, boot_info):
-    clear()
+    #clear()
     print('Obrigado por utilizar o SuperMini!')
     now = datetime.now().time()
     if now >= time(5,00) and now <= time(12,00): 
@@ -645,6 +711,8 @@ def ShowHelp(folder_content, cmd, image, boot_info):
     print('    Ex: S')
     print('T - Transferir do SuperMini para o disco. O parâmetro deve ser o índice do arquivo a ser transferido.')
     print('    Ex: T 12')
+    print('V - Verificação de Integridade do Bitmap. Checa em toda a imagem se os blocos alocados estão coerentes com o bitmap.')
+    print('    Ex: V')
     print()
 
     back_input = input('Insira X para voltar ao diretório anterior.\n')
@@ -658,7 +726,7 @@ def UserInterface(folder_content, image, boot_info):
     print('-------------------------------------------')
     print('Insira um comando. Insira H para ver ajuda.')
     
-    commands = ['A', 'C', 'E', 'F', 'H', 'S', 'T']
+    commands = ['A', 'C', 'E', 'F', 'H', 'S', 'T', 'V']
     #Abrir, Criar Diretorio, Escrever no SuperMini, Formatar, Transferir para disco
     cmd = input()
 
@@ -672,7 +740,8 @@ def UserInterface(folder_content, image, boot_info):
         'F': FormatImg,
         'H': ShowHelp,
         'S': Fechar,
-        'T': TransferToDisc
+        'T': TransferToDisc,
+        'V': VerifyBitmap
     }
 
     command_dict[cmd[0].upper()](folder_content, cmd, image, boot_info)
