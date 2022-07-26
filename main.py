@@ -500,32 +500,56 @@ def WalkImage(image, boot_info, block):
     image.seek(block * boot_info['block_size'])
     return image
 
-def erase_bitmap(bitmap, initial_block, superblock_length):
-    zero_byte = (0).to_bytes(1, 'big')
+def stitch_bitmap(bitmap, new_byte_index, new_byte):
+    #new_byte is passed as an integer
+
+    bitmap = bitmap[:new_byte_index] + new_byte.to_bytes(1,'big') + bitmap[new_byte_index+1:]
     
+    return bitmap
+
+def valid_old_byte(old_byte, bit_inicial, bit_final):
+    erased_bits = old_byte[bit_inicial:bit_final]
+    
+    for bit in erased_bits:
+        if bit=='1':
+            continue
+        else:
+            return False
+    
+    return True
+
+def erase_bitmap(bitmap, initial_block, superblock_length):
     if initial_block%8!=0:
         resto = initial_block%8
         old_byte = bin(bitmap[initial_block//8])[2:]
-        if len(old_byte)<8:
-            old_byte = '0'*(8-len(old_byte))+old_byte
+        old_byte = old_byte.zfill(8)
         freed_bits = min((8-resto), superblock_length)
         
+        if not valid_old_byte(old_byte, resto, resto+freed_bits):
+            return bitmap, False
+
         new_byte = int(old_byte[:resto]+'0'*freed_bits+old_byte[resto+freed_bits:],2)
-        bitmap = bitmap[:(initial_block//8)] + new_byte.to_bytes(1,'big') + bitmap[(initial_block//8)+1:]
+        bitmap = stitch_bitmap(bitmap, (initial_block//8), new_byte)
         initial_block += 8-resto     #arredonda pra múltiplo de 8
         superblock_length -= 8-resto
     
     if superblock_length>0:
         for byte_block in range(superblock_length//8):
-            bitmap = bitmap[:(initial_block//8)+byte_block] + zero_byte + bitmap[(initial_block//8)+byte_block+1:]
+            first_bit = (initial_block//8)+byte_block
+            old_byte = bin(bitmap[first_bit])[2:]
+            if not valid_old_byte(old_byte, 0, 8):
+                return bitmap, False
+            bitmap = stitch_bitmap(bitmap, first_bit, 0)
         
         if superblock_length%8!=0:
             resto = superblock_length%8
-            old_byte = bin(bitmap[superblock_length//8])[2:]
+            old_byte = bin(bitmap[(initial_block+superblock_length)//8])[2:]
+            if not valid_old_byte(old_byte, 0, resto):
+                return bitmap, False
             new_byte = int('0'*resto + old_byte[resto:],2)
-            bitmap = bitmap[:(initial_block+superblock_length)//8] + new_byte.to_bytes(1,'big') + bitmap[((initial_block+superblock_length)//8)+1:]
+            bitmap = stitch_bitmap(bitmap, (initial_block+superblock_length)//8, new_byte)
 
-    return bitmap
+    return bitmap, True
 
 def get_file_blocks(file_block, image, boot_info):
     file_block_list = []
@@ -535,37 +559,56 @@ def get_file_blocks(file_block, image, boot_info):
         image = WalkImage(image, boot_info, next_block)
         next_block = int.from_bytes(image.read(8), 'little')
         superblock_size = int.from_bytes(image.read(8), 'little')
+        if next_block==0 or superblock_size==0:
+            return file_block_list, False
+
         file_block_list.append([file_block, superblock_size])
         file_block = next_block
 
-    return file_block_list
+    return file_block_list, True
 
 def VerifyBitmap(folder_content, cmd, image, boot_info):
-    print("Aguarde. A imagem está sendo verificada.")
     block_size = boot_info['block_size']
     blocks_quantity = boot_info['blocks_quantity']
 
     bitmap_size = ceil(blocks_quantity/(8*block_size))
     image = WalkImage(image, boot_info, 1)
     bitmap = image.read(bitmap_size*block_size)
-    bitmap = erase_bitmap(bitmap, 0, bitmap_size+1)
+
+    bitmap, valid_bits = erase_bitmap(bitmap, 0, bitmap_size+1)
+    if not valid_bits:
+        print(f"ERRO: Bitmap corrompido! Blocos indevidamente alocados ao bitmap.")
+        input("Pressione Enter para encerrar...")
+        Fechar(folder_content, cmd, image, boot_info)
 
     i = bitmap_size+1
 
     while i<blocks_quantity:
         if bitmap[i//8]==0:
-            i+=1
+            i+=8-(i%8)
+        elif bin(bitmap[i//8])[2:].zfill(8)[i%8]=='0':  #caso byte seja diferente de zero, olha para o bit atual
+            i+=1                             
         else:
             byte_map = bin(bitmap[i//8])[2:]
             first_one = byte_map.index('1')
             file_block = i+first_one
-            file_block_list = get_file_blocks(file_block, image, boot_info)
+            file_block_list, valid_file = get_file_blocks(file_block, image, boot_info)
+            if not valid_file:
+                print(f"ERRO: Arquivo corrompido! Arquivo afetado: bloco inicial {file_block}.")
+                input("Pressione Enter para encerrar...")
+                Fechar(folder_content, cmd, image, boot_info)
 
             for superblock in file_block_list:
-                bitmap = erase_bitmap(bitmap, superblock[0], superblock[1])
+                bitmap, valid_bits = erase_bitmap(bitmap, superblock[0], superblock[1])
+                if not valid_bits:
+                    print(f"ERRO: Bitmap corrompido! Arquivo afetado: bloco inicial {file_block}.")
+                    input("Pressione Enter para encerrar...")
+                    Fechar(folder_content, cmd, image, boot_info)
             i += file_block_list[0][1]
 
-    Fechar(folder_content, cmd, image, boot_info)
+    print("Verificação concluída! Nenhum erro foi encontrado.")
+    input("Pressione Enter para continuar...")
+    ShowFolder(folder_content, image, boot_info)
 
 def CreateImage(image_name, blocks_quantity, block_size_log2):
     block_size = int(2**block_size_log2)
@@ -680,7 +723,7 @@ def FormatImg(folder_content, cmd, image, boot_info):
     pass
 
 def Fechar(folder_content, cmd, image, boot_info):
-    #clear()
+    clear()
     print('Obrigado por utilizar o SuperMini!')
     now = datetime.now().time()
     if now >= time(5,00) and now <= time(12,00): 
