@@ -49,11 +49,6 @@ def Read_Folder(image, boot_info, isRoot):
             concatenate = True
         while size_left:
             thing_name = ''
-            while mini_block_attribute == b'\x80' and size_left:
-                image.seek(15, 1)
-                mini_block_attribute = image.read(1)
-                size_left -= 16
-
             if mini_block_attribute == b'\x00':
                 break
             if not concatenate:
@@ -619,115 +614,6 @@ def FormatImg(folder_content, cmd, image, boot_info):
 
     pass
 
-def RemoveInfo(block_begin, image, boot_info):
-    next_block = 0
-    current_block = block_begin
-    blocks_list = []
-    while next_block != FF8BYTES:
-        image.seek(current_block * boot_info['block_size'])
-        next_block = int.from_bytes(image.read(8), 'little')
-        block_size = int.from_bytes(image.read(8), 'little')
-        blocks_list += [x for x in range(current_block, current_block + block_size, 1)]
-        image.seek(current_block * boot_info['block_size'])
-        image.write((0).to_bytes(block_size * boot_info['block_size'], byteorder='little'))
-        current_block = next_block
-    return blocks_list
-
-def RemoveContent(folder_content, file_number, image, boot_info):
-    offset = 0
-    if folder_content[0][2] == 0:
-        offset = 24
-
-    image.seek(folder_content[0][2] * boot_info['block_size'] + offset)
-    current_file = -1
-    next_block = 0
-    current_block = folder_content[0][2]
-    offset = 0
-    size_left = 0
-    while next_block != FF8BYTES:
-        next_block = int.from_bytes(image.read(8), 'little')
-        if current_block == 0:
-            block_size = 0
-            size_left = boot_info['block_size'] * block_size - 32
-            offset = 32
-        else:
-            block_size = int.from_bytes(image.read(8), 'little')
-            size_left = boot_info['block_size'] * block_size - 16
-            offset = 16
-        
-        while size_left:
-            extension = image.read(1)
-            if extension == b'\x10' or extension == b'\x20':
-                current_file += 1
-            image.seek(15, 1)
-            if current_file == file_number:
-                break
-            size_left = -16
-            offset += 16
-
-        if current_file == file_number:
-            break
-        current_block = next_block
-        
-    image.seek(current_block * boot_info['block_size'] + offset)
-
-    # achou o ponteiro inicial, agora continuar excluindo, se acabar o bloco, ir pro próximo
-    blocks_used = 1 + ceil(folder_content[file_number][2]/16)
-    while blocks_used:
-        image.write(b'\x80')
-        image.seek(15, 1)
-        blocks_used -= 1
-        size_left = -16
-        if size_left == 0:
-            image.seek(next_block * boot_info['block_size'])
-            next_block = int.from_bytes(image.read(8), 'little')
-            block_size = int.from_bytes(image.read(8), 'little')
-            size_left = boot_info['block_size'] * block_size - 16
-
-
-def RemoveBitmap(image, blocks_list, boot_info):
-    for item in blocks_list:
-        image.seek(boot_info['block_size'] + (item)//8)
-        byte = image.read(1)
-        mask = ~(1 << 7 - (item)%8)
-        print(mask)
-        # stop the code
-        byte = byte[0] & ~(1 << 7 - (item)%8)
-
-        image.seek(-1, 1)
-        image.write(bytes([byte]))
-
-def Remove(folder_content, cmd, image, boot_info):
-    if int (cmd[2:]) == 0:
-        print('ERRO! Não é possível remover o próprio diretório.')
-        UserInterface(folder_content, image, boot_info)
-    elif int (cmd[2:]) == 1 and folder_content[0][2] != 0:
-        print('ERRO! Não é possível remover o diretório anterior.')
-        UserInterface(folder_content, image, boot_info)
-    else:
-        print('ATENÇÃO: Os dados atuais serão perdidos.')
-        choice = input('Deseja continuar? (S/N) ')
-        blocks_list = []
-        if choice.upper() == 'S':
-            file_number = int(cmd[2:])
-            block_begin = folder_content[file_number][2]
-            if folder_content[file_number][3] == b'\x10':
-                image.seek(folder_content[file_number][2] * boot_info['block_size'])
-                content_inside = Read_Folder(image, boot_info, False)
-                if len(content_inside) > 2:
-                    print('ERRO! Não é possível remover um diretório que contém arquivos.')
-                    UserInterface(folder_content, image, boot_info)
-                    return
-
-            RemoveContent(folder_content, file_number, image, boot_info)
-            
-            blocks_list = RemoveInfo(block_begin, image, boot_info)
-            RemoveBitmap(image, blocks_list, boot_info)
-            image.seek(folder_content[0][2] * boot_info['block_size'])
-            folder_content = Read_Folder(image, boot_info, True if folder_content[0][2] == 0 else False)
-
-    ShowFolder(folder_content, image, boot_info)
-
 def Fechar(folder_content, cmd, image, boot_info):
     clear()
     print('Obrigado por utilizar o SuperMini!')
@@ -752,8 +638,6 @@ def ShowHelp(folder_content, cmd, image, boot_info):
     print('    Ex: A 12')
     print('C - Criar diretório. O parâmetro passado deve ser o nome do diretório.')
     print('    Ex: C nova_pasta')
-    print('R - Exclusão de arquivo/pasta. O parâmetro passado deve ser o índice exibido no diretório atual.')
-    print('    Ex: R 4')
     print('E - Escrever um arquivo no SuperMini. O parâmetro deve ser o nome do arquivo a ser lido do disco para o SuperMini.')
     print('    Ex: E teste.txt. ATENÇÃO: O arquivo a ser escrito no SuperMini deve se encontrar na mesma pasta que a aplicação')
     print('F - Formatar. Nenhum parâmetro é passado.')
@@ -775,7 +659,7 @@ def UserInterface(folder_content, image, boot_info):
     print('-------------------------------------------')
     print('Insira um comando. Insira H para ver ajuda.')
     
-    commands = ['A', 'C', 'E', 'F', 'H', 'S', 'T', 'R']
+    commands = ['A', 'C', 'E', 'F', 'H', 'S', 'T']
     #Abrir, Criar Diretorio, Escrever no SuperMini, Formatar, Transferir para disco
     cmd = input()
 
@@ -786,7 +670,6 @@ def UserInterface(folder_content, image, boot_info):
         'A': OpenThing,
         'C': CreateDirectory,
         'E': WriteToSuperMini,
-        'R': Remove,
         'F': FormatImg,
         'H': ShowHelp,
         'S': Fechar,
