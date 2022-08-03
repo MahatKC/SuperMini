@@ -2,9 +2,6 @@ from math import ceil, log2
 import os
 from os.path import exists
 from datetime import datetime, time
-from re import ASCII
-
-from numpy import block
 
 FF8BYTES = 18446744073709551615      #VALOR INTEIRO DE FF PRA 8 BYTES
 
@@ -672,7 +669,7 @@ def RemoveContent(folder_content, file_number, image, boot_info):
     image.seek(current_block * boot_info['block_size'] + offset)
 
     # achou o ponteiro inicial, agora continuar excluindo, se acabar o bloco, ir pro próximo
-    blocks_used = 1 + ceil(folder_content[file_number][2]/16)
+    blocks_used = 1 + ceil(len(folder_content[file_number][0])/16)
     while blocks_used:
         image.write(b'\x80')
         image.seek(15, 1)
