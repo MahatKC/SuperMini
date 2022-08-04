@@ -501,6 +501,37 @@ def WalkImage(image, boot_info, block):
     image.seek(block * boot_info['block_size'])
     return image
 
+def CheckLoopIntegrity(folder_content, cmd, image, boot_info):
+    if not CheckLoopIntegritySubf(folder_content, cmd, image, boot_info):
+        print('Nenhum loop de superbloco encontrado :)')
+
+
+def CheckLoopIntegritySubf(folder_content, cmd, image, boot_info):
+    items = folder_content[1:]
+    if items[0][0] == '..': items.pop(0)
+    loop_found = False
+    for item in items:
+        if item[-1] == b'\x10':
+            image = WalkImage(image, boot_info, item[2])
+            next_folder_content = Read_Folder(image, boot_info, False)
+            loop_found = CheckLoopIntegritySubf(next_folder_content, cmd, image, boot_info) or loop_found
+        elif item[-1] == b'\x20':
+            superblocks_list = []
+            next_superblock = item[2]
+            while next_superblock != FF8BYTES:
+                superblocks_list.append(next_superblock)
+                image = WalkImage(image, boot_info, next_superblock)
+                next_superblock = int.from_bytes(image.read(8), 'little')
+                if next_superblock in superblocks_list:
+                    print(f'Loop de superbloco encontrado no arquivo {item[0]}!')
+                    loop_found = True
+                    break
+        else:
+            print('Exception at CheckLoopIntegrity')
+    return loop_found
+
+
+
 def CreateImage(image_name, blocks_quantity, block_size_log2):
     block_size = int(2**block_size_log2)
     
@@ -645,6 +676,9 @@ def ShowHelp(folder_content, cmd, image, boot_info):
     print('    Ex: S')
     print('T - Transferir do SuperMini para o disco. O parâmetro deve ser o índice do arquivo a ser transferido.')
     print('    Ex: T 12')
+    print('I - Faz checagem de loops existentes entre os superblocos dos arquivos filhos do diretório atual. A checagem é feita')
+    print('    também nos arquivos presentes em subdiretórios. Nenhum parâmetro é passado.')
+    print('    Ex: I')
     print()
 
     back_input = input('Insira X para voltar ao diretório anterior.\n')
@@ -658,7 +692,7 @@ def UserInterface(folder_content, image, boot_info):
     print('-------------------------------------------')
     print('Insira um comando. Insira H para ver ajuda.')
     
-    commands = ['A', 'C', 'E', 'F', 'H', 'S', 'T']
+    commands = ['A', 'C', 'E', 'F', 'H', 'S', 'T', 'I']
     #Abrir, Criar Diretorio, Escrever no SuperMini, Formatar, Transferir para disco
     cmd = input()
 
@@ -672,7 +706,8 @@ def UserInterface(folder_content, image, boot_info):
         'F': FormatImg,
         'H': ShowHelp,
         'S': Fechar,
-        'T': TransferToDisc
+        'T': TransferToDisc,
+        'I': CheckLoopIntegrity
     }
 
     command_dict[cmd[0].upper()](folder_content, cmd, image, boot_info)
